@@ -1,14 +1,16 @@
 package zhevaha.com.sunshine;
 
-import android.app.Activity;
-import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
+import android.support.v7.app.AppCompatActivity;
 import android.text.format.Time;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -27,13 +29,17 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 
-import static android.app.PendingIntent.getActivity;
-
 public class MainActivity extends AppCompatActivity {
 
     private final String LOG_TAG = "SunshineLogs";
-    private final String MESSAGE = "message";
+//    private final String MESSAGE = "message";
     ArrayAdapter<String> adapter;
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        updateWeather();
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,10 +51,11 @@ public class MainActivity extends AppCompatActivity {
                 R.layout.list_item,
                 R.id.degreeText);
 
-        FetchWeatherTask weatherTask = new FetchWeatherTask();
+//        FetchWeatherTask weatherTask = new FetchWeatherTask();
 //        weatherTask.execute("524901");
-//        weatherTask.execute("02121");
-        weatherTask.execute("Kiev");
+//        weatherTask.execute(getSharedPreferences(R.string.pref_location_default, 94043));
+//        weatherTask.execute("Kiev");
+        updateWeather();
         ListView listView = (ListView) findViewById(R.id.listview_forecast);
         listView.setAdapter(adapter);
         listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
@@ -56,12 +63,76 @@ public class MainActivity extends AppCompatActivity {
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
             String message = adapter.getItem(position);
                 Intent intent = new Intent(MainActivity.this, DetailActivity.class);
-                intent.putExtra(MESSAGE,message);
+                intent.putExtra(Intent.EXTRA_TEXT, message);
                 startActivity(intent);
 //                Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
             }
         });
     }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        getMenuInflater().inflate(R.menu.main, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle action bar item clicks here. The action bar will
+        // automatically handle clicks on the Home/Up button, so long
+        // as you specify a parent activity in AndroidManifest.xml.
+        int id = item.getItemId();
+        if (id == R.id.action_refresh) {
+            updateWeather();
+        }
+        else if (id == R.id.action_settings) {
+            startActivity(new Intent(this, SettingsActivity.class));
+            return true;
+        }
+
+        if (id==R.id.action_map){
+            openPreferredLocationInMap();
+            return true;
+        }
+
+        return super.onOptionsItemSelected(item);
+    }
+
+    private void openPreferredLocationInMap() {
+
+        SharedPreferences sharedPrefs =
+                PreferenceManager.getDefaultSharedPreferences(this);
+        String location = sharedPrefs.getString(
+                getString(R.string.pref_location_key),
+                getString(R.string.pref_location_default));
+
+        Uri geoLocation = Uri.parse("geo:0,0").buildUpon()
+                .appendQueryParameter("q", location)
+                .build();
+//        Uri geoLocation = Uri.parse("geo:0,0?z=17");
+        showMap(geoLocation);
+    }
+
+    private void showMap(Uri geoLocation) {
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setData(geoLocation);
+        if (intent.resolveActivity(getPackageManager()) != null) {
+            startActivity(intent);
+        }else {
+            Log.d(LOG_TAG, "Couldn't call " + geoLocation + ", no receiving apps installed!");
+        }
+    }
+    private void updateWeather() {
+        FetchWeatherTask weatherTask = new FetchWeatherTask();
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainActivity.this);
+        String location = prefs.getString(getString(R.string.pref_location_key), getString(R.string.pref_location_default));
+//        String metrics = prefs.getString(getString(R.string.pref_units_key),getString(R.string.pref_units_default));
+        weatherTask.execute(location);
+//        weatherTask.execute(metrics);
+        Toast.makeText(getApplicationContext(), location, Toast.LENGTH_SHORT).show();
+    }
+
     private class FetchWeatherTask extends AsyncTask<String, Void, String []>{
 
         /* The date/time conversion code is going to be moved outside the asynctask later,
@@ -79,10 +150,23 @@ public class MainActivity extends AppCompatActivity {
          */
         private String formatHighLows(double high, double low) {
             // For presentation, assume the user doesn't care about tenths of a degree.
+
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainActivity.this);
+            String unitType = prefs.getString(getString(R.string.pref_units_key), getString(R.string.pref_units_default));
+
+            String degrees = " \u00B0C";
+            if (unitType.equals(getString(R.string.pref_units_imperial))) {
+                high = (high * 1.8) + 32;
+                low = (low * 1.8) + 32;
+                degrees = " \u00B0F";
+            } else if (!unitType.equals(getString(R.string.pref_units_metric))) {
+                Log.d(LOG_TAG, "Unit type not found: " + unitType);
+            }
+
             long roundedHigh = Math.round(high);
             long roundedLow = Math.round(low);
 
-            String highLowStr = roundedHigh + "/" + roundedLow;
+            String highLowStr = roundedHigh + " / " + roundedLow + degrees ;
             return highLowStr;
         }
 
@@ -274,4 +358,6 @@ public class MainActivity extends AppCompatActivity {
 
         }
     }
+
+
 }
